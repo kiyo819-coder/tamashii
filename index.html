@@ -23,7 +23,7 @@ input{font-family:'Kaisei Decol',serif;outline:none;}
 input::placeholder{color:rgba(255,150,50,.4);}
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:rgba(255,50,0,.1)}::-webkit-scrollbar-thumb{background:rgba(255,100,0,.4);border-radius:2px}
 #app{position:fixed;inset:0;}
-canvas{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;opacity:.82;z-index:1;}
+canvas{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;opacity:.82;z-index:1;will-change:transform;}
 .vignette{position:fixed;inset:0;z-index:3;pointer-events:none;background:radial-gradient(ellipse at center,transparent 30%,rgba(100,0,0,.65) 100%);}
 .glow{position:fixed;inset:0;z-index:2;pointer-events:none;background:radial-gradient(ellipse at 50% 85%,rgba(255,70,0,.2) 0%,transparent 60%);}
 .screen{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;}
@@ -143,13 +143,13 @@ function flameLoop(){
   requestAnimationFrame(flameLoop);
   ctx.clearRect(0,0,canvas.width,canvas.height);
   frameCount++;
-  if(frameCount%2===0){
-    const n=Math.ceil(canvas.width/32);
+  if(frameCount%3===0){
+    const n=Math.ceil(canvas.width/52);
     for(let i=0;i<n;i++)flameParticles.push(new FP(Math.random()*canvas.width,canvas.height+5));
   }
   flameParticles=flameParticles.filter(p=>p.life>0);
   flameParticles.forEach(p=>{p.tick();p.draw();});
-  if(flameParticles.length>500)flameParticles.splice(0,40);
+  if(flameParticles.length>280)flameParticles.splice(0,30);
 }
 flameLoop();
 
@@ -160,7 +160,7 @@ function nextMsg(){const m=L[lang].msg;let i;do{i=Math.floor(Math.random()*m.len
 
 function spawnFlame(cx,cy){
   const app=document.getElementById("app");
-  const count=7+Math.floor(Math.random()*7);
+  const count=4+Math.floor(Math.random()*4);
   for(let i=0;i<count;i++){
     const a=Math.random()*Math.PI*2,d=20+Math.random()*95;
     const dx=Math.cos(a)*d,dy=-(55+Math.random()*135);
@@ -176,7 +176,7 @@ function spawnFlame(cx,cy){
 function spawnSpark(cx,cy){
   const app=document.getElementById("app");
   const sh=["*","@","#","+","x"],cl=["#ffd700","#ffaa00","#ff6600","#fff","#ffee88","#ff4400"];
-  const count=3+Math.floor(Math.random()*5);
+  const count=2+Math.floor(Math.random()*3);
   for(let i=0;i<count;i++){
     const a=Math.random()*Math.PI*2,d=30+Math.random()*90;
     const dx=Math.cos(a)*d,dy=Math.sin(a)*d-55;
@@ -200,10 +200,11 @@ function spawnWord(cx,cy){
   setTimeout(()=>el.remove(),900);
 }
 function doFlash(x,y){
-  flashX=Math.floor((x/window.innerWidth)*100)+"%";
-  flashY=Math.floor((y/window.innerHeight)*100)+"%";
-  flashing=true;render();
-  setTimeout(()=>{flashing=false;render();},70);
+  const el=document.getElementById("flash-overlay");
+  if(!el)return;
+  el.style.background=`radial-gradient(circle at ${Math.floor((x/window.innerWidth)*100)}% ${Math.floor((y/window.innerHeight)*100)}%,rgba(255,180,0,.55) 0%,rgba(255,80,0,.2) 40%,transparent 70%)`;
+  el.style.opacity="1";
+  setTimeout(()=>{el.style.opacity="0";},70);
 }
 function doShake(){
   document.getElementById("app").style.animation="none";
@@ -211,6 +212,35 @@ function doShake(){
     document.getElementById("app").style.animation="sk .35s ease";
     setTimeout(()=>document.getElementById("app").style.animation="none",350);
   });
+}
+
+// --- Lightweight game UI update (no full DOM rebuild) ---
+function updateGameUI(){
+  const timerEl=document.getElementById("g-timer");
+  if(!timerEl)return;
+  timerEl.textContent=Math.ceil(tl);
+  if(danger){
+    timerEl.style.color="#f10";
+    timerEl.style.textShadow="0 0 35px #f10,0 0 80px rgba(255,0,0,.8),4px 4px 0 rgba(80,0,0,.6)";
+    timerEl.style.animation="dp .4s ease-in-out infinite";
+  }else{
+    timerEl.style.color="#fa0";
+    timerEl.style.textShadow="0 0 25px #f60,0 0 60px rgba(255,150,0,.6),4px 4px 0 rgba(80,0,0,.6)";
+    timerEl.style.animation="";
+  }
+  const barEl=document.getElementById("g-bar");
+  if(barEl){
+    barEl.style.width=Math.max(0,(tl/T)*100)+"%";
+    if(danger){barEl.style.background="linear-gradient(90deg,#f00,#f33)";barEl.style.boxShadow="0 0 20px rgba(255,0,0,.9)";}
+    else{barEl.style.background="linear-gradient(90deg,#f10,#f60,#fa0,#fe0)";barEl.style.boxShadow="0 0 10px rgba(255,150,0,.6)";}
+  }
+  const msgEl=document.getElementById("g-msg");
+  if(msgEl&&msgEl.textContent!==curMsg){
+    msgEl.textContent=curMsg;
+    msgEl.style.animation="none";
+    void msgEl.offsetWidth;
+    msgEl.style.animation="mi .28s cubic-bezier(.175,.885,.32,1.5) both";
+  }
 }
 
 // --- Game Logic ---
@@ -232,10 +262,10 @@ function startGame(){
   timerInt=setInterval(()=>{
     t-=.1;tl=Math.max(0,t);
     if(t<=3)danger=true;
-    if(t<=0){clearInterval(timerInt);clearInterval(msgInt);endGame();}
-    render();
+    if(t<=0){clearInterval(timerInt);clearInterval(msgInt);endGame();return;}
+    updateGameUI();
   },100);
-  msgInt=setInterval(()=>{nextMsg();render();},750);
+  msgInt=setInterval(()=>{nextMsg();updateGameUI();},750);
 }
 function endGame(){
   activeGame=false;
@@ -258,8 +288,14 @@ function onTap(e){
   const y=e.touches?e.touches[0].clientY:(e.clientY||window.innerHeight/2);
   spawnFlame(x,y);spawnSpark(x,y);spawnWord(x,y);doFlash(x,y);
   if(tap%5===0)doShake();
-  pressed=true;render();
-  setTimeout(()=>{pressed=false;render();},85);
+  const tapEl=document.getElementById("g-tap");
+  if(tapEl)tapEl.textContent=tap;
+  const btn=document.getElementById("tapBtn");
+  if(btn){
+    btn.style.transform="scale(.85)";
+    btn.style.boxShadow="0 0 0 2px rgba(255,80,0,.2),inset 0 5px 18px rgba(0,0,0,.7)";
+    setTimeout(()=>{btn.style.transform="scale(1)";btn.style.boxShadow="0 0 0 4px rgba(255,100,0,.4),0 0 35px rgba(255,60,0,.7),inset 0 3px 10px rgba(255,220,100,.3),inset 0 -5px 14px rgba(0,0,0,.6)";},85);
+  }
 }
 
 function setScr(s){scr=s;if(s==="ranking"){loadRanking().then(()=>render());return;}render();}
@@ -274,7 +310,7 @@ function render(){
     <div class="glow"></div>
     <div class="vignette"></div>
     ${Array.from({length:20},(_,i)=>`<div class="star-dot" style="left:${(i*17+13)%100}%;top:${(i*23+7)%100}%;width:${2+i%4}px;height:${2+i%4}px;background:rgba(255,${150+i*5%100},0,.9);box-shadow:0 0 ${5+i%6}px rgba(255,150,0,.7);animation:sg ${1.5+i*.15}s ease-in-out ${i*.12}s infinite;z-index:4;"></div>`).join("")}
-    <div style="position:fixed;inset:0;z-index:6;pointer-events:none;opacity:${flashing?1:0};background:radial-gradient(circle at ${flashX} ${flashY},rgba(255,180,0,.55) 0%,rgba(255,80,0,.2) 40%,transparent 70%);transition:opacity .04s;"></div>
+    <div id="flash-overlay" style="position:fixed;inset:0;z-index:6;pointer-events:none;opacity:0;transition:opacity .04s;will-change:opacity;"></div>
 
     <div class="lang-switch">
       <button class="lang-btn ${lang==="ja"?"active":"inactive"}" onclick="setLang('ja')">日本語</button>
@@ -314,18 +350,18 @@ function render(){
     ${scr==="game"?`
       <div class="screen" style="justify-content:space-between;padding:58px 20px 18px;">
         <div style="width:100%;text-align:center;">
-          <div style="font-size:clamp(68px,21vw,100px);font-weight:700;color:${danger?"#f10":"#fa0"};line-height:1;text-shadow:${danger?"0 0 35px #f10,0 0 80px rgba(255,0,0,.8),4px 4px 0 rgba(80,0,0,.6)":"0 0 25px #f60,0 0 60px rgba(255,150,0,.6),4px 4px 0 rgba(80,0,0,.6)"};${danger?"animation:dp .4s ease-in-out infinite;":""}">${Math.ceil(tl)}</div>
+          <div id="g-timer" style="font-size:clamp(68px,21vw,100px);font-weight:700;color:${danger?"#f10":"#fa0"};line-height:1;text-shadow:${danger?"0 0 35px #f10,0 0 80px rgba(255,0,0,.8),4px 4px 0 rgba(80,0,0,.6)":"0 0 25px #f60,0 0 60px rgba(255,150,0,.6),4px 4px 0 rgba(80,0,0,.6)"};${danger?"animation:dp .4s ease-in-out infinite;":""}">${Math.ceil(tl)}</div>
           <div style="font-family:'Hina Mincho',serif;font-size:11px;color:rgba(255,160,50,.55);letter-spacing:5px;">${Lc.sl}</div>
           <div style="width:100%;height:10px;background:rgba(255,255,255,.07);border-radius:5px;overflow:hidden;margin-top:8px;">
-            <div style="height:100%;width:${Math.max(0,(tl/T)*100)}%;background:${danger?"linear-gradient(90deg,#f00,#f33)":"linear-gradient(90deg,#f10,#f60,#fa0,#fe0)"};border-radius:5px;transition:width .1s linear;box-shadow:${danger?"0 0 20px rgba(255,0,0,.9)":"0 0 10px rgba(255,150,0,.6)"};"></div>
+            <div id="g-bar" style="height:100%;width:${Math.max(0,(tl/T)*100)}%;background:${danger?"linear-gradient(90deg,#f00,#f33)":"linear-gradient(90deg,#f10,#f60,#fa0,#fe0)"};border-radius:5px;transition:width .1s linear;box-shadow:${danger?"0 0 20px rgba(255,0,0,.9)":"0 0 10px rgba(255,150,0,.6)"};"></div>
           </div>
         </div>
         <div style="flex:1;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 8px;">
-          <div style="font-size:clamp(16px,5.5vw,27px);font-weight:700;color:white;line-height:1.35;max-width:340px;text-shadow:0 0 12px rgba(255,120,0,1),2px 2px 0 rgba(120,0,0,.8);animation:mi .28s cubic-bezier(.175,.885,.32,1.5) both;">${curMsg}</div>
+          <div id="g-msg" style="font-size:clamp(16px,5.5vw,27px);font-weight:700;color:white;line-height:1.35;max-width:340px;text-shadow:0 0 12px rgba(255,120,0,1),2px 2px 0 rgba(120,0,0,.8);animation:mi .28s cubic-bezier(.175,.885,.32,1.5) both;">${curMsg}</div>
         </div>
         <div style="width:100%;display:flex;flex-direction:column;align-items:center;gap:8px;">
           <div style="text-align:center;">
-            <div style="font-size:clamp(46px,14vw,72px);font-weight:700;color:#fa0;line-height:1;text-shadow:0 0 25px #f60,0 0 50px rgba(255,150,0,.5);animation:sp .12s ease-out both;">${tap}</div>
+            <div id="g-tap" style="font-size:clamp(46px,14vw,72px);font-weight:700;color:#fa0;line-height:1;text-shadow:0 0 25px #f60,0 0 50px rgba(255,150,0,.5);">${tap}</div>
             <div style="font-family:'Hina Mincho',serif;font-size:10px;color:rgba(255,160,50,.5);letter-spacing:3px;">${Lc.tl}</div>
           </div>
           <button id="tapBtn" class="main-btn" style="width:${btnSz}px;height:${btnSz}px;font-size:${btnSz*.15}px;transform:${pressed?"scale(.85)":"scale(1)"};box-shadow:${pressed?"0 0 0 2px rgba(255,80,0,.2),inset 0 5px 18px rgba(0,0,0,.7)":"0 0 0 4px rgba(255,100,0,.4),0 0 35px rgba(255,60,0,.7),inset 0 3px 10px rgba(255,220,100,.3),inset 0 -5px 14px rgba(0,0,0,.6)"};">
