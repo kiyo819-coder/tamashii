@@ -47,8 +47,6 @@ canvas{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;opacity
 <div id="app"></div>
 <canvas id="flameCanvas"></canvas>
 
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script>
 const T=10;
 const MSG_JA=["さすがだ！その速さ本物だ！","すごい！もはや人間じゃない！","さすが！お前のためにある10秒！","それでいい！最高だぞ！","センスが違う！生まれながらの覇者！","そうだ！それがお前の本当の力！","止まるな！止まったら俺が泣く！","さすがすぎる！言葉が出ない！","すごい才能だ！こんな人間初めて見た！","さすがの一言に尽きる！","それだ！その調子！宇宙一だ！","センスの塊！お前は天才だ！","すごすぎて笑えてきた！","さすがだ！母ちゃんに自慢しろ！","そこまで速いか！鬼神か！","すごい集中力！神がかってる！","さすが本物は違う！格が違う！","それが覚悟というものだ！","速い！速すぎる！化け物め！","さすがだ！銀河系最強はお前！","そうだ！魂を燃やし続けろ！","センス抜群！天が認めた！","すごすぎる！完璧すぎる！","鬼の速さ！さすがとしか言えん！","神様もお前を見て嫉妬してる！","お前の才能は底なしだ！"];
@@ -73,12 +71,43 @@ let activeGame=false,timerInt=null,msgInt=null,lastMsgIdx=-1,touchFired=false;
 let shaking=false,flashing=false,flashX="50%",flashY="50%";
 let flames=[],sparks=[];
 
-// --- Firestore ranking ---
-const firebaseConfig={apiKey:"AIzaSyDdfcpAupfdOxbQfxEcLNiQ0zHJgsdYahQ",authDomain:"tamashii-3a6fa.firebaseapp.com",projectId:"tamashii-3a6fa",storageBucket:"tamashii-3a6fa.firebasestorage.app",messagingSenderId:"515052077301",appId:"1:515052077301:web:b52e1454259ca5afb445bc"};
-firebase.initializeApp(firebaseConfig);
-const db=firebase.firestore();
-async function loadRanking(){try{const snap=await db.collection("rankings").orderBy("score","desc").limit(50).get();ranking=snap.docs.map(d=>d.data());}catch(e){console.error("loadRanking:",e);}}
-async function addScore(n,s){if(!n||s<=0)return;try{const ref=db.collection("rankings").doc(n);const ex=await ref.get();if(!ex.exists||ex.data().score<s){await ref.set({name:n,score:s,date:new Date().toLocaleDateString("ja-JP")});}await loadRanking();}catch(e){console.error("addScore:",e);}}
+// --- Firestore REST API ranking ---
+const FS_URL="https://firestore.googleapis.com/v1/projects/tamashii-3a6fa/databases/(default)/documents";
+const FS_KEY="AIzaSyDdfcpAupfdOxbQfxEcLNiQ0zHJgsdYahQ";
+function fsNum(f){return Number(f?.integerValue??f?.doubleValue??0);}
+function nameToId(n){return n.replace(/\//g,"_");}
+async function loadRanking(){
+  try{
+    const r=await fetch(`${FS_URL}/rankings?key=${FS_KEY}&pageSize=200`);
+    if(!r.ok)throw new Error("HTTP "+r.status);
+    const d=await r.json();
+    ranking=(d.documents||[]).map(doc=>({name:doc.fields?.name?.stringValue||"",score:fsNum(doc.fields?.score),date:doc.fields?.date?.stringValue||""}));
+    ranking.sort((a,b)=>b.score-a.score);
+    ranking=ranking.slice(0,50);
+  }catch(e){
+    console.error("loadRanking:",e);
+    try{const d=localStorage.getItem("tamashii-v1");if(d)ranking=JSON.parse(d);}catch(e2){}
+  }
+}
+async function addScore(n,s){
+  if(!n||s<=0)return;
+  const id=nameToId(n);
+  const url=`${FS_URL}/rankings/${id}?key=${FS_KEY}`;
+  try{
+    const chk=await fetch(url);
+    if(chk.ok){const ex=await chk.json();if(fsNum(ex.fields?.score)>=s){await loadRanking();return;}}
+    const pw=await fetch(url,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({fields:{name:{stringValue:n},score:{integerValue:String(s)},date:{stringValue:new Date().toLocaleDateString("ja-JP")}}})});
+    if(!pw.ok)throw new Error("PATCH "+pw.status);
+  }catch(e){console.error("addScore Firestore:",e);}
+  try{
+    let lr=[];try{const d=localStorage.getItem("tamashii-v1");if(d)lr=JSON.parse(d);}catch(e2){}
+    lr=lr.filter(e=>e.name!==n);
+    lr.push({name:n,score:s,date:new Date().toLocaleDateString("ja-JP")});
+    lr.sort((a,b)=>b.score-a.score);
+    localStorage.setItem("tamashii-v1",JSON.stringify(lr.slice(0,50)));
+  }catch(e){}
+  await loadRanking();
+}
 
 // --- Flame Canvas ---
 const canvas=document.getElementById("flameCanvas");
