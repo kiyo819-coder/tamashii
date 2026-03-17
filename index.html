@@ -296,7 +296,7 @@ function render(){
     ${scr==="name"?`
       <div class="screen" style="gap:18px;">
         <div style="font-size:clamp(19px,5.5vw,26px);font-weight:700;color:white;text-shadow:0 0 15px rgba(255,100,0,.8);text-align:center;letter-spacing:2px;">${Lc.np}</div>
-        <input class="name-input" value="${name.replace(/"/g,'&quot;')}" placeholder="${Lc.nph}" maxlength="12" oninput="name=this.value" onkeydown="if(event.key==='Enter')startCD()"/>
+        <input class="name-input" value="${name.replace(/"/g,'&quot;')}" placeholder="${Lc.nph}" maxlength="12" oninput="setName(this.value)" onkeydown="if(event.key==='Enter')startCD()"/>
         <div style="display:flex;gap:12px;">
           <button class="back-btn" onclick="setScr('start')">${Lc.bk}</button>
           <button class="fight-btn" onclick="startCD()">${Lc.nc}</button>
@@ -384,6 +384,7 @@ function render(){
   }
 }
 
+function setName(v){name=v;}
 function setLang(l){lang=l;render();}
 
 render();
